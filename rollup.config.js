@@ -1,13 +1,8 @@
 import svelte from 'rollup-plugin-svelte';
-import resolve from '@rollup/plugin-node-resolve';
+import resolve from 'rollup-plugin-node-resolve';
+import serve from 'rollup-plugin-serve'
 import livereload from 'rollup-plugin-livereload';
-import {terser} from 'rollup-plugin-terser';
-import pkg from './package.json';
-
-const name = pkg.name
-  .replace(/^(@\S+\/)?(svelte-)?(\S+)/, '$3')
-  .replace(/^\w/, m => m.toUpperCase())
-  .replace(/-\w/g, m => m[1].toUpperCase());
+import { terser } from 'rollup-plugin-terser';
 
 const production = !process.env.ROLLUP_WATCH;
 
@@ -21,47 +16,34 @@ export default {
       file: 'public/bundle.js',
     } : [
       {
-        sourcemap: true,
-        format: 'es',
-        name,
-        file: pkg.module
+        file: `./build/index.mjs`,
+        format: 'esm',
+        paths: (id) => id.startsWith('svelte/') && `${id.replace('svelte', '.')}`,
       },
       {
-        sourcemap: true,
-        format: 'umd',
-        name,
-        file: pkg.main,
-      }
+        file: `./build/index.js`,
+        format: 'cjs',
+        paths: (id) => id.startsWith('svelte/') && `${id.replace('svelte', '.')}`,
+      },
     ],
   plugins: [
     svelte({
-      dev: !production
+      compilerOptions: {
+        dev: !production
+      }
     }),
     resolve({
       browser: true
     }),
-    !production && serve(),
-    !production && livereload('public'),
-    production && terser()
+    !production && serve({
+      contentBase: './public'
+    }),
+    !production && livereload({
+      watch: 'public'
+    }),
+    production && terser(),
   ],
   watch: {
     clearScreen: false
   }
 };
-
-function serve() {
-  let started = false;
-
-  return {
-    writeBundle() {
-      if (!started) {
-        started = true;
-
-        require('child_process').spawn('yarn', ['start', '--', '--dev'], {
-          stdio: ['ignore', 'inherit', 'inherit'],
-          shell: true
-        });
-      }
-    }
-  };
-}
