@@ -41,8 +41,8 @@ export const createForm = (options) => {
   const getInitial = {
     values: () => cloneDeep(defaultValues),
     errors: () => assignDeep(defaultValues, ''),
-    touched: () => assignDeep(defaultValues, false)
-  }
+    touched: () => assignDeep(defaultValues, false),
+  };
 
   const values = writable(getInitial.values());
   const errors = writable(getInitial.errors());
@@ -66,6 +66,47 @@ export const createForm = (options) => {
     return updateValue(field, value);
   };
 
+  /**
+   * Reset form values, errors, touched to initial values.
+   */
+  const reset = () => {
+    values.set(getInitial.values());
+    errors.set(getInitial.errors());
+    touched.set(getInitial.touched());
+  };
+
+  /**
+   * Manually set error message for given field.
+   * @param {string} path - field path
+   * @param {string} error - error message
+   * @returns
+   */
+  const setError = (path, error) => {
+    errors.update((obj) => {
+      set(obj, path, error);
+
+      return obj;
+    });
+  };
+
+  /**
+   *  Manually clean error for given field/fields.
+   * @param {(string|string[])} field - field name or array of filds names
+   * @returns
+   */
+  const clearErrors = (field) => {
+    if (typeof field === 'string' && field.length > 0) {
+      setError(field, '');
+      return;
+    }
+
+    if (Array.isArray(field) && field.length > 0) {
+      field.forEach((path) => {
+        setError(path, '');
+      });
+    }
+  };
+
   const handleSubmit = (event) => {
     if (event && event.preventDefault) {
       event.preventDefault();
@@ -77,19 +118,23 @@ export const createForm = (options) => {
       values.subscribe(resolve)();
     }).then((values) => {
       return Promise.resolve()
+        .then(() => errors.set(getInitial.errors()))
         .then(() => onSubmit(values))
         .finally(() => isSubmitting.set(false));
     });
-  }
+  };
 
   return {
     handleChange,
     handleSubmit,
+    reset,
+    setError,
+    clearErrors,
     values,
     errors,
     touched,
     isSubmitting,
-    state: derived([
+    formState: derived([
       values,
       errors,
       touched,
