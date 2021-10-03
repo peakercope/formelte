@@ -1,4 +1,4 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 
 function cloneDeep(object) {
   return JSON.parse(JSON.stringify(object));
@@ -31,24 +31,29 @@ function set(obj, path, value) {
        obj)[path[path.length-1]] = value; // Finally assign the value to the last key
   return obj;
 }
-
+const validators = {
+  required: (value) => !!value,
+  maxLength: (value, criteria) => value && value.length <= criteria,
+  minLength: (value, criteria) => value && value.length >= criteria,
+  pattern: (value, criteria) => value && criteria.test(value),
+};
 
 export const createForm = (options) => {
   const defaultValues = options.defaultValues || {};
+  const basicValidation = options.validate;
 
   const onSubmit = options.onSubmit;
 
   const getInitial = {
     values: () => cloneDeep(defaultValues),
     errors: () => assignDeep(defaultValues, ''),
-    touched: () => assignDeep(defaultValues, false),
   };
 
   const values = writable(getInitial.values());
   const errors = writable(getInitial.errors());
-  const touched = writable(getInitial.touched());
 
   const isSubmitting = writable(false);
+  const isValidating = writable(false);
 
   const updateValue = (path, value) => {
     values.update((obj) => {
@@ -58,12 +63,46 @@ export const createForm = (options) => {
     })
   };
 
+  const validateField = (field, value) => {
+    let isValid = true;
+
+    if (basicValidation && basicValidation[field]) {
+      isValidating.set(true);
+
+      for (let key in basicValidation[field]) {
+        const rule = basicValidation[field][key];
+        let criteria;
+        let message = '';
+        if (typeof rule === 'object' && !(rule instanceof RegExp)) {
+          criteria = rule.value;
+          message = rule.message;
+        } else {
+          criteria = rule;
+          message = `'${field}' doesn't match '${key}' rule`;
+        }
+        isValid = validators[key](value, criteria);
+
+        if (!isValid) {
+          setError(field, message);
+          break;
+        }
+        clearErrors(field);
+      }
+
+      isValidating.set(false);
+
+      return isValid;
+    }
+  };
+
   const handleChange = (event) => {
     const element = event.target;
     const field = element.name || element.id;
     const value = (element.getAttribute && element.getAttribute('type') === 'checkbox') ? element.checked : element.value;
 
-    return updateValue(field, value);
+    updateValue(field, value);
+
+    return validateField(field, value);
   };
 
   /**
@@ -72,7 +111,6 @@ export const createForm = (options) => {
   const reset = () => {
     values.set(getInitial.values());
     errors.set(getInitial.errors());
-    touched.set(getInitial.touched());
   };
 
   /**
@@ -81,7 +119,7 @@ export const createForm = (options) => {
    * @param {string} error - error message
    * @returns
    */
-  const setError = (path, error) => {
+  function setError(path, error) {
     errors.update((obj) => {
       set(obj, path, error);
 
@@ -94,7 +132,7 @@ export const createForm = (options) => {
    * @param {(string|string[])} field - field name or array of filds names
    * @returns
    */
-  const clearErrors = (field) => {
+  function clearErrors(field) {
     if (typeof field === 'string' && field.length > 0) {
       setError(field, '');
       return;
@@ -107,7 +145,14 @@ export const createForm = (options) => {
     }
   };
 
-  const handleSubmit = (event) => {
+  function submitForm(values) {
+    return Promise.resolve()
+      .then(() => errors.set(getInitial.errors()))
+      .then(() => onSubmit(values))
+      .finally(() => isSubmitting.set(false));
+  }
+
+  function handleSubmit(event) {
     if (event && event.preventDefault) {
       event.preventDefault();
     }
@@ -117,10 +162,17 @@ export const createForm = (options) => {
     return new Promise((resolve) => {
       values.subscribe(resolve)();
     }).then((values) => {
-      return Promise.resolve()
-        .then(() => errors.set(getInitial.errors()))
-        .then(() => onSubmit(values))
-        .finally(() => isSubmitting.set(false));
+      if (basicValidation && Object.keys(basicValidation).length > 0) {
+        return Promise.resolve()
+          .then(() => Promise.resolve(Object.keys(basicValidation).map((key) => validateField(key, values[key])))
+          .then((validationResult) => {
+            if (validationResult.some((invalid) => !!invalid)) {
+              submitForm(values);
+            }
+          }));
+      }
+
+      submitForm(values);
     });
   };
 
@@ -132,23 +184,23 @@ export const createForm = (options) => {
     clearErrors,
     values,
     errors,
-    touched,
     isSubmitting,
+    isValidating,
     formState: derived([
       values,
       errors,
-      touched,
       isSubmitting,
+      isValidating,
     ], ([
       $values,
       $errors,
-      $touched,
       $isSubmitting,
+      $isValidating,
     ]) => ({
       values: $values,
       errors: $errors,
-      touched: $touched,
       isSubmitting: $isSubmitting,
+      isValidating: $isValidating,
     })),
   };
 };

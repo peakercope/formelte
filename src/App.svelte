@@ -1,10 +1,17 @@
 <script>
   import { createForm } from './module.js';
-  const { values, errors, handleChange, handleSubmit } = createForm({
+
+  const { values, errors, formState, handleChange, handleSubmit } = createForm({
     defaultValues: {
       name: '',
       position: '',
       subscribe: true,
+    },
+    validate: {
+      name: {
+        required: true,
+        pattern: {value: /[A-Za-z]{3}/, message: 'custom message'},
+      },
     },
     onSubmit: (values) => {
       console.log(values);
