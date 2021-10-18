@@ -36,6 +36,7 @@ const validators = {
   maxLength: (value, criteria) => value && value.length <= criteria,
   minLength: (value, criteria) => value && value.length >= criteria,
   pattern: (value, criteria) => value && criteria.test(value),
+  validate: (value, criteria) => criteria(value) ? false : true,
 };
 
 export const createForm = (options) => {
@@ -73,9 +74,13 @@ export const createForm = (options) => {
         const rule = basicValidation[field][key];
         let criteria;
         let message = '';
+
         if (typeof rule === 'object' && !(rule instanceof RegExp)) {
           criteria = rule.value;
           message = rule.message;
+        } else if (typeof rule === 'function') {
+          criteria = rule;
+          message = rule(value);
         } else {
           criteria = rule;
           message = `'${field}' doesn't match '${key}' rule`;
@@ -106,7 +111,7 @@ export const createForm = (options) => {
   };
 
   /**
-   * Reset form values, errors, touched to initial values.
+   * Reset form values and errors to initial values.
    */
   const reset = () => {
     values.set(getInitial.values());

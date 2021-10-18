@@ -10,7 +10,8 @@
     validate: {
       name: {
         required: true,
-        pattern: {value: /[A-Za-z]{3}/, message: 'custom message'},
+        pattern: { value: /[A-Za-z]{3}/, message: 'custom message pattern' },
+        validate: (value) => value !== 'test' ? 'custom validarion func' : '',
       },
     },
     onSubmit: (values) => {
